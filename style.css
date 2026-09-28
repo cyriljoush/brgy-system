@@ -1,0 +1,77 @@
+/* Barangay Management System - Light/Dark Theme */
+:root {
+    --bg: #eef3f8;
+    --surface: #ffffff;
+    --surface-2: #f8fafc;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --border: #dee2e6;
+    --topbar: #198754;
+    --sidebar: #ffffff;
+    --sidebar-text: #374151;
+    --sidebar-hover: #e8f5ee;
+}
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    transition: background .2s ease, color .2s ease;
+}
+.navbar-brand { letter-spacing:.2px; }
+.topbar { background: var(--topbar) !important; }
+aside.sidebar {
+    background: var(--sidebar);
+    min-height: calc(100vh - 56px);
+    border-right: 1px solid var(--border);
+}
+aside .nav-link { margin-bottom:5px; border-radius:8px; color:var(--sidebar-text); }
+aside .nav-link:hover, aside .nav-link.active { background:#198754; color:#fff; }
+.card { border:0; border-radius:12px; background:var(--surface); color:var(--text); }
+.stat-card { min-height:125px; }
+.table { color:var(--text); }
+.table th { white-space:nowrap; }
+.table > :not(caption) > * > * { background-color:var(--surface); color:var(--text); border-color:var(--border); }
+.form-control, .form-select { background-color:var(--surface); color:var(--text); border-color:var(--border); }
+.form-control:focus, .form-select:focus { background-color:var(--surface); color:var(--text); }
+.text-muted { color:var(--muted) !important; }
+.modal-content, .dropdown-menu { background:var(--surface); color:var(--text); }
+
+.theme-toggle {
+    border:1px solid rgba(255,255,255,.45);
+    background:rgba(255,255,255,.12);
+    color:#fff;
+    border-radius:8px;
+    padding:.35rem .65rem;
+    cursor:pointer;
+}
+.theme-toggle:hover { background:rgba(255,255,255,.22); color:#fff; }
+
+/* Dark mode */
+body.dark-mode {
+    --bg:#111827;
+    --surface:#1f2937;
+    --surface-2:#18212f;
+    --text:#e5e7eb;
+    --muted:#9ca3af;
+    --border:#374151;
+    --sidebar:#17202d;
+    --sidebar-text:#d1d5db;
+    --sidebar-hover:#263547;
+}
+body.dark-mode .bg-light { background-color:var(--surface) !important; color:var(--text) !important; }
+body.dark-mode .btn-light { background:#374151; border-color:#4b5563; color:#fff; }
+body.dark-mode .btn-light:hover { background:#4b5563; }
+body.dark-mode .alert { color:var(--text); }
+body.dark-mode input::placeholder, body.dark-mode textarea::placeholder { color:#9ca3af; }
+
+@media (max-width: 767.98px) {
+    aside.sidebar { min-height:auto; border-right:0; border-bottom:1px solid var(--border); }
+}
+
+@media print {
+    .no-print, nav, aside { display:none !important; }
+    main { width:100% !important; }
+}
+
+/* Text-entry fields use uppercase letters throughout the system. */
+input[type="text"], input[type="search"], input[type="tel"], textarea { text-transform: uppercase; }
