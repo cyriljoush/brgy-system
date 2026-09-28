@@ -1,0 +1,150 @@
+<?php
+require_once "../includes/header.php";
+
+$role = $_SESSION["user"]["role"];
+$isResident = ($role === "Resident");
+$isStaff = ($role === "Administrator" || $role === "Secretary");
+if (!$isResident && !$isStaff) {
+    echo '<div class="alert alert-danger">Only residents, the Secretary, and the Administrator can access document requests.</div>';
+    require_once "../includes/footer.php";
+    exit;
+}
+
+$error = "";
+$success = "";
+
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    $action = isset($_POST["request_action"]) ? $_POST["request_action"] : "";
+
+    if ($isResident && $action === "request") {
+        $rid = (int)$_SESSION["user"]["resident_id"];
+        $type = trim(isset($_POST["document_type"]) ? $_POST["document_type"] : "");
+        $purpose = trim(isset($_POST["purpose"]) ? $_POST["purpose"] : "");
+
+        if ($rid <= 0) {
+            $error = "Your account is not linked to a resident record. Please contact the administrator.";
+        } elseif ($type === "") {
+            $error = "Please select a document type.";
+        } else {
+            $stmt = $conn->prepare("INSERT INTO document_requests (resident_id, document_type, purpose, status) VALUES (?, ?, ?, 'Pending')");
+            if ($stmt) {
+                $stmt->bind_param("iss", $rid, $type, $purpose);
+                if ($stmt->execute()) {
+                    log_action($conn, "Requested document: " . $type);
+                    $success = "Your document request has been submitted to the barangay office.";
+                } else {
+                    $error = "Unable to submit request: " . $stmt->error;
+                }
+                $stmt->close();
+            } else {
+                $error = "Database error: " . $conn->error;
+            }
+        }
+    }
+
+    if ($isStaff && $action === "status") {
+        $id = (int)(isset($_POST["request_id"]) ? $_POST["request_id"] : 0);
+        $status = trim(isset($_POST["status"]) ? $_POST["status"] : "");
+        $allowed = array("Pending", "Processing", "Ready", "Released", "Rejected");
+        if (!in_array($status, $allowed, true)) {
+            $error = "Invalid request status.";
+        } else {
+            if ($status === "Ready") {
+                $stmt = $conn->prepare("UPDATE document_requests SET status=?, ready_at=NOW(), processed_by=?, processed_at=NOW() WHERE id=?");
+            } else {
+                $stmt = $conn->prepare("UPDATE document_requests SET status=?, processed_by=?, processed_at=NOW() WHERE id=?");
+            }
+            if ($stmt) {
+                $uid = (int)$_SESSION["user"]["id"];
+                $stmt->bind_param("sii", $status, $uid, $id);
+                if ($stmt->execute()) {
+                    log_action($conn, "Updated document request #" . $id . " to " . $status);
+                    $success = "Document request status updated.";
+                } else {
+                    $error = "Unable to update request: " . $stmt->error;
+                }
+                $stmt->close();
+            } else {
+                $error = "Database error: " . $conn->error;
+            }
+        }
+    }
+}
+
+$search = trim(isset($_GET["search"]) ? $_GET["search"] : "");
+$page = max(1, (int)(isset($_GET["page"]) ? $_GET["page"] : 1));
+$limit = 10; $offset = ($page - 1) * $limit;
+
+if ($isResident) {
+    $rid = (int)$_SESSION["user"]["resident_id"];
+    if ($search !== "") {
+        $like = "%" . $search . "%";
+        $stmt = $conn->prepare("SELECT COUNT(*) total FROM document_requests WHERE resident_id=? AND (document_type LIKE ? OR purpose LIKE ? OR status LIKE ?)");
+        $stmt->bind_param("isss",$rid,$like,$like,$like); $stmt->execute(); $total=(int)$stmt->get_result()->fetch_assoc()["total"]; $stmt->close();
+        $stmt = $conn->prepare("SELECT id, document_type, purpose, status, requested_at, ready_at, processed_at, notes FROM document_requests WHERE resident_id=? AND (document_type LIKE ? OR purpose LIKE ? OR status LIKE ?) ORDER BY requested_at DESC, id DESC LIMIT ? OFFSET ?");
+        $stmt->bind_param("isssii",$rid,$like,$like,$like,$limit,$offset); $stmt->execute(); $rows=$stmt->get_result();
+    } else {
+        $stmt=$conn->prepare("SELECT COUNT(*) total FROM document_requests WHERE resident_id=?"); $stmt->bind_param("i",$rid); $stmt->execute(); $total=(int)$stmt->get_result()->fetch_assoc()["total"]; $stmt->close();
+        $stmt = $conn->prepare("SELECT id, document_type, purpose, status, requested_at, ready_at, processed_at, notes FROM document_requests WHERE resident_id=? ORDER BY requested_at DESC, id DESC LIMIT ? OFFSET ?");
+        $stmt->bind_param("iii",$rid,$limit,$offset); $stmt->execute(); $rows=$stmt->get_result();
+    }
+} else {
+    $baseWhere = "";
+    if ($search !== "") {
+        $like = "%" . $search . "%";
+        $stmt=$conn->prepare("SELECT COUNT(*) total FROM document_requests dr LEFT JOIN residents r ON dr.resident_id=r.id WHERE r.first_name LIKE ? OR r.last_name LIKE ? OR r.resident_no LIKE ? OR dr.document_type LIKE ? OR dr.purpose LIKE ? OR dr.status LIKE ?");
+        $stmt->bind_param("ssssss",$like,$like,$like,$like,$like,$like); $stmt->execute(); $total=(int)$stmt->get_result()->fetch_assoc()["total"]; $stmt->close();
+        $stmt=$conn->prepare("SELECT dr.*, CONCAT(r.first_name,' ',IFNULL(r.middle_name,''),' ',r.last_name) AS resident_name, r.resident_no, u.full_name AS processed_name
+            FROM document_requests dr LEFT JOIN residents r ON dr.resident_id=r.id LEFT JOIN users u ON dr.processed_by=u.id
+            WHERE r.first_name LIKE ? OR r.last_name LIKE ? OR r.resident_no LIKE ? OR dr.document_type LIKE ? OR dr.purpose LIKE ? OR dr.status LIKE ?
+            ORDER BY CASE dr.status WHEN 'Pending' THEN 1 WHEN 'Processing' THEN 2 WHEN 'Ready' THEN 3 WHEN 'Rejected' THEN 4 ELSE 5 END, dr.requested_at DESC, dr.id DESC LIMIT ? OFFSET ?");
+        $stmt->bind_param("ssssssii",$like,$like,$like,$like,$like,$like,$limit,$offset); $stmt->execute(); $rows=$stmt->get_result();
+    } else {
+        $total=(int)$conn->query("SELECT COUNT(*) total FROM document_requests")->fetch_assoc()["total"];
+        $rows=$conn->query("SELECT dr.*, CONCAT(r.first_name,' ',IFNULL(r.middle_name,''),' ',r.last_name) AS resident_name, r.resident_no, u.full_name AS processed_name
+            FROM document_requests dr LEFT JOIN residents r ON dr.resident_id=r.id LEFT JOIN users u ON dr.processed_by=u.id
+            ORDER BY CASE dr.status WHEN 'Pending' THEN 1 WHEN 'Processing' THEN 2 WHEN 'Ready' THEN 3 WHEN 'Rejected' THEN 4 ELSE 5 END, dr.requested_at DESC, dr.id DESC LIMIT ".$limit." OFFSET ".$offset);
+    }
+}
+$totalPages=max(1,(int)ceil($total/$limit));
+?>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div><h2 class="mb-1"><?php echo $isResident ? 'Request Documents' : 'Document Requests'; ?></h2>
+    <p class="text-muted mb-0"><?php echo $isResident ? 'Submit a document request and check when it is ready for pickup.' : 'Review resident requests and update their status.'; ?></p></div>
+</div>
+<?php if ($error !== "") { ?><div class="alert alert-danger"><?php echo e($error); ?></div><?php } ?>
+<?php if ($success !== "") { ?><div class="alert alert-success"><i class="bi bi-check-circle"></i> <?php echo e($success); ?></div><?php } ?>
+<form method="get" class="row g-2 mb-3">
+<div class="col-md-6"><input type="text" name="search" class="form-control" value="<?php echo e($search); ?>" placeholder="Search resident, document type, purpose, or status"></div>
+<div class="col-auto"><button class="btn btn-outline-success"><i class="bi bi-search"></i> Search</button></div>
+<div class="col-auto"><a class="btn btn-outline-secondary" href="document_requests.php">Clear</a></div>
+</form>
+
+<?php if ($isResident) { ?>
+<div class="card shadow-sm mb-4"><div class="card-body">
+<h5>New Document Request</h5>
+<form method="post" class="row g-3">
+<input type="hidden" name="request_action" value="request">
+<div class="col-md-5"><label class="form-label">Document Type</label><select name="document_type" class="form-select" required>
+<option value="">Select document</option><option>Barangay Clearance</option><option>Certificate of Residency</option><option>Certificate of Indigency</option><option>Certificate of Good Moral Character</option><option>Barangay Certificate</option><option>Business Clearance</option><option>First-Time Job Seeker Certificate</option>
+</select></div>
+<div class="col-md-7"><label class="form-label">Purpose</label><input name="purpose" class="form-control" placeholder="Purpose of the request" required></div>
+<div class="col-12"><button class="btn btn-success"><i class="bi bi-send"></i> Submit Request</button></div>
+</form>
+</div></div>
+
+<div class="card shadow-sm"><div class="card-body"><h5>My Requests</h5><div class="table-responsive"><table class="table table-hover"><thead><tr><th>Document</th><th>Purpose</th><th>Requested</th><th>Status</th><th>Pickup Notification</th></tr></thead><tbody>
+<?php if ($rows->num_rows > 0) { while ($r=$rows->fetch_assoc()) { $badge='secondary'; if($r['status']==='Pending')$badge='warning'; elseif($r['status']==='Processing')$badge='info'; elseif($r['status']==='Ready')$badge='success'; elseif($r['status']==='Rejected')$badge='danger'; ?>
+<tr><td><?php echo e($r['document_type']); ?></td><td><?php echo e($r['purpose']); ?></td><td><?php echo e($r['requested_at']); ?></td><td><span class="badge bg-<?php echo $badge; ?>"><?php echo e($r['status']); ?></span></td><td><?php if($r['status']==='Ready'){ ?><span class="text-success fw-bold"><i class="bi bi-bell-fill"></i> Ready for pickup<?php echo $r['ready_at'] ? ' · '.e($r['ready_at']) : ''; ?></span><?php } elseif($r['status']==='Rejected'){ ?><span class="text-danger">Request rejected</span><?php } else { ?><span class="text-muted">Please wait for processing.</span><?php } ?></td></tr>
+<?php } } else { ?><tr><td colspan="5" class="text-center text-muted py-4">You have no document requests yet.</td></tr><?php } ?>
+</tbody></table></div></div></div>
+<?php } else { ?>
+<div class="alert alert-info"><i class="bi bi-info-circle"></i> When you set a request to <b>Ready</b>, the resident will see a pickup notification on their Resident Dashboard and Request Documents page.</div>
+<div class="card shadow-sm"><div class="table-responsive"><table class="table table-hover mb-0"><thead class="table-success"><tr><th>Resident</th><th>Document</th><th>Purpose</th><th>Requested</th><th>Status</th><th>Processed By</th><th>Action</th></tr></thead><tbody>
+<?php if ($rows && $rows->num_rows > 0) { while ($r=$rows->fetch_assoc()) { $badge='secondary'; if($r['status']==='Pending')$badge='warning'; elseif($r['status']==='Processing')$badge='info'; elseif($r['status']==='Ready')$badge='success'; elseif($r['status']==='Rejected')$badge='danger'; ?>
+<tr><td><b><?php echo e($r['resident_name']); ?></b><br><small class="text-muted"><?php echo e($r['resident_no']); ?></small></td><td><?php echo e($r['document_type']); ?></td><td><?php echo e($r['purpose']); ?></td><td><?php echo e($r['requested_at']); ?></td><td><span class="badge bg-<?php echo $badge; ?>"><?php echo e($r['status']); ?></span><?php if($r['status']==='Ready'){ ?><br><small class="text-success">Ready for pickup</small><?php } ?></td><td><?php echo e($r['processed_name']); ?></td><td><form method="post" class="d-flex gap-1"><input type="hidden" name="request_action" value="status"><input type="hidden" name="request_id" value="<?php echo e($r['id']); ?>"><select name="status" class="form-select form-select-sm"><option <?php echo $r['status']==='Pending'?'selected':''; ?>>Pending</option><option <?php echo $r['status']==='Processing'?'selected':''; ?>>Processing</option><option <?php echo $r['status']==='Ready'?'selected':''; ?>>Ready</option><option <?php echo $r['status']==='Released'?'selected':''; ?>>Released</option><option <?php echo $r['status']==='Rejected'?'selected':''; ?>>Rejected</option></select><button class="btn btn-sm btn-success">Save</button></form></td></tr>
+<?php } } else { ?><tr><td colspan="7" class="text-center text-muted py-4">No document requests yet.</td></tr><?php } ?>
+</tbody></table></div></div>
+<?php } ?>
+<?php if($totalPages>1){ ?><nav class="mt-3"><ul class="pagination justify-content-center"><?php for($p=1;$p<=$totalPages;$p++){ $url="?page=".$p.($search!==""?"&search=".urlencode($search):""); ?><li class="page-item <?php echo $p===$page?"active":""; ?>"><a class="page-link" href="<?php echo e($url); ?>"><?php echo $p; ?></a></li><?php } ?></ul></nav><?php } ?>
+<?php require_once "../includes/footer.php"; ?>

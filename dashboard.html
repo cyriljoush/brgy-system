@@ -1,0 +1,60 @@
+<?php
+require_once "../includes/config.php";
+require_login();
+if (is_resident_account()) { header("Location: resident_dashboard.php"); exit; }
+require_once "../includes/header.php";
+
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["save_hotlines"]) && $_SESSION["user"]["role"] === "Administrator") {
+    $agencies = array(
+        "RED CROSS",
+        "NATIONAL DISASTER RISK REDUCTION AND MANAGEMENT COUNCIL (NDRRMC)",
+        "PHILIPPINE NATIONAL POLICE (PNP)",
+        "BUREAU OF FIRE PROTECTION (BFP)",
+        "PHILIPPINE COAST GUARD",
+        "DEPARTMENT OF SOCIAL WELFARE AND DEVELOPMENT (DSWD)"
+    );
+    $stmtHot = $conn->prepare("UPDATE emergency_hotlines SET phone=? WHERE agency=?");
+    foreach ($agencies as $agency) {
+        $phone = isset($_POST["hotline_" . md5($agency)]) ? trim($_POST["hotline_" . md5($agency)]) : "";
+        $stmtHot->bind_param("ss", $phone, $agency);
+        $stmtHot->execute();
+    }
+    $stmtHot->close();
+    log_action($conn, "Updated emergency hotline numbers");
+    echo '<div class="alert alert-success">Emergency hotline numbers updated successfully.</div>';
+}
+$residents=$conn->query("SELECT COUNT(*) c FROM residents")->fetch_assoc(); $residents=$residents["c"];
+$households=$conn->query("SELECT COUNT(*) c FROM households")->fetch_assoc(); $households=$households["c"];
+$blotters=$conn->query("SELECT COUNT(*) c FROM blotter WHERE status <> 'Closed'")->fetch_assoc(); $blotters=$blotters["c"];
+$documents=$conn->query("SELECT COUNT(*) c FROM documents")->fetch_assoc(); $documents=$documents["c"];
+$announcements=$conn->query("SELECT COUNT(*) c FROM announcements")->fetch_assoc(); $announcements=$announcements["c"];
+$pendingRequests=$conn->query("SELECT COUNT(*) c FROM document_requests WHERE status IN ('Pending','Processing')")->fetch_assoc(); $pendingRequests=$pendingRequests["c"];
+sync_senior_status($conn);
+$senior=$conn->query("SELECT COUNT(*) c FROM residents WHERE senior='Yes'")->fetch_assoc(); $senior=$senior["c"];
+$pwd=$conn->query("SELECT COUNT(*) c FROM residents WHERE pwd='Yes'")->fetch_assoc(); $pwd=$pwd["c"];
+$hotlines=$conn->query("SELECT agency,phone FROM emergency_hotlines ORDER BY id");
+?>
+
+<div class="d-flex justify-content-between align-items-center mb-4"><h2 class="fw-bold">Barangay Dashboard</h2><span class="text-muted"><?php echo date("F d, Y"); ?></span></div>
+<div class="row g-3">
+<?php $cards=array(array("Residents",$residents,"people","primary"),array("Households",$households,"house","success"),array("Senior Citizens (55+)",$senior,"person-heart","warning"),array("PWD",$pwd,"universal-access","secondary"),array("Active Blotter",$blotters,"journal-text","danger"),array("Documents Issued",$documents,"file-earmark-text","info"),array("Announcements",$announcements,"megaphone","secondary"),array("Document Requests",$pendingRequests,"inbox","dark")); foreach($cards as $c){ ?>
+<div class="col-sm-6 col-xl-2"><div class="card shadow-sm stat-card"><div class="card-body"><div class="d-flex justify-content-between"><div><div class="text-muted"><?php echo e($c[0]); ?></div><h2 class="fw-bold"><?php echo e($c[1]); ?></h2></div><div class="fs-1 text-<?php echo $c[3]; ?>"><i class="bi bi-<?php echo $c[2]; ?>"></i></div></div></div></div></div>
+<?php } ?></div>
+
+<div class="card shadow-sm mt-3 border-danger">
+<div class="card-body">
+<div class="d-flex justify-content-between align-items-center mb-3"><h5 class="mb-0 text-danger"><i class="bi bi-telephone-fill"></i> Emergency Hotlines</h5><span class="badge bg-danger">Emergency</span></div>
+<div class="row g-2">
+<?php while($h=$hotlines->fetch_assoc()){ ?><div class="col-md-6 col-xl-4"><div class="border rounded p-3 h-100"><div class="fw-bold"><?php echo e($h["agency"]); ?></div><div class="fs-5 text-danger"><?php echo $h["phone"]!=="" ? e($h["phone"]) : '<span class="text-muted fs-6">NUMBER NOT SET</span>'; ?></div></div></div><?php } ?>
+</div>
+<?php if($_SESSION["user"]["role"] === "Administrator"){ 
+$hotlinesForm=$conn->query("SELECT agency,phone FROM emergency_hotlines ORDER BY id");
+?>
+<hr><h6>Administrator: Set Emergency Hotline Numbers</h6>
+<form method="post" class="row g-2"><?php while($h=$hotlinesForm->fetch_assoc()){ $key=md5($h["agency"]); ?><div class="col-md-6"><label class="form-label"><?php echo e($h["agency"]); ?></label><input class="form-control" name="hotline_<?php echo $key; ?>" value="<?php echo e($h["phone"]); ?>" placeholder="Enter emergency number"></div><?php } ?><div class="col-12"><button class="btn btn-danger" name="save_hotlines" value="1"><i class="bi bi-save"></i> Save Hotline Numbers</button></div></form>
+<?php } ?>
+</div></div>
+
+<div class="row g-3 mt-2"><div class="col-lg-7"><div class="card shadow-sm"><div class="card-body"><h5>Quick Actions</h5><a class="btn btn-success me-2 mb-2" href="residents.php?action=add">Add Resident</a><a class="btn btn-primary me-2 mb-2" href="population.php">Population Records</a><a class="btn btn-info me-2 mb-2" href="reports.php">View Reports</a><a class="btn btn-secondary me-2 mb-2" href="announcements.php">Announcement</a><a class="btn btn-dark mb-2" href="document_requests.php">Document Requests</a></div></div></div>
+<div class="col-lg-5"><div class="card shadow-sm"><div class="card-body"><h5>Logged In</h5><p class="mb-1"><b><?php echo e($_SESSION["user"]["full_name"]); ?></b></p><p class="mb-0">Role: <b><?php echo e($_SESSION["user"]["role"]); ?></b></p></div></div></div></div>
+<?php require_once "../includes/footer.php"; ?>

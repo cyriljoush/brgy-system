@@ -1,0 +1,20 @@
+<?php
+require_once "../includes/header.php";
+if($_SERVER["REQUEST_METHOD"]==="POST"){
+  $stmt=$conn->prepare("INSERT INTO announcements(title,message,target,created_by) VALUES(?,?,?,?)");
+  $uid=$_SESSION['user']['id'];$stmt->bind_param("sssi",$_POST['title'],$_POST['message'],$_POST['target'],$uid);$stmt->execute();$stmt->close();
+  log_action($conn,"Created announcement ".$_POST['title']);
+  header("Location: announcements.php");exit;
+}
+$rows=$conn->query("SELECT a.*,u.full_name FROM announcements a LEFT JOIN users u ON a.created_by=u.id ORDER BY a.created_at DESC");
+?>
+<h2 class="mb-3">Announcements & SMS</h2>
+<div class="alert alert-info">The announcement is stored in the system. Actual SMS sending requires an SMS gateway/API; this Version 1 prepares the announcement records for that integration.</div>
+<?php if(!is_resident_account()){ ?><div class="card shadow-sm mb-4"><div class="card-body"><form method="post" class="row g-2">
+<div class="col-md-6"><label>Title</label><input class="form-control" name="title" required></div>
+<div class="col-md-6"><label>Target</label><select class="form-select" name="target"><option>All Residents</option><option>Purok 1</option><option>Purok 2</option><option>Purok 3</option><option>Senior Citizens</option><option>Other</option></select></div>
+<div class="col-12"><label>Message</label><textarea class="form-control" name="message" rows="4" maxlength="320" required></textarea></div>
+<div class="col-12"><button class="btn btn-success">Save Announcement</button></div>
+</form></div></div><?php } ?>
+<div class="card shadow-sm"><div class="table-responsive"><table class="table mb-0"><thead class="table-success"><tr><th>Title</th><th>Target</th><th>Message</th><th>Date</th><th>Created By</th></tr></thead><tbody><?php while($r=$rows->fetch_assoc()):?><tr><td><?=e($r['title'])?></td><td><?=e($r['target'])?></td><td><?=e($r['message'])?></td><td><?=e($r['created_at'])?></td><td><?=e($r['full_name'])?></td></tr><?php endwhile;?></tbody></table></div></div>
+<?php require_once "../includes/footer.php"; ?>

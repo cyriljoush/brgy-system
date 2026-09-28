@@ -1,0 +1,37 @@
+<?php
+require_once "../includes/header.php";
+resident_only();
+$rid=(int)$_SESSION["user"]["resident_id"];
+if($rid<=0){ echo '<div class="alert alert-warning">Your account is not linked to a resident record. Please contact the barangay administrator.</div>'; require_once "../includes/footer.php"; exit; }
+sync_senior_status($conn);
+$stmt=$conn->prepare("SELECT *, TIMESTAMPDIFF(YEAR,birthdate,CURDATE()) age FROM residents WHERE id=?"); $stmt->bind_param("i",$rid); $stmt->execute(); $resident=$stmt->get_result()->fetch_assoc(); $stmt->close();
+$docs=$conn->prepare("SELECT document_no,document_type,purpose,issued_date FROM documents WHERE resident_id=? ORDER BY issued_date DESC LIMIT 10"); $docs->bind_param("i",$rid); $docs->execute(); $docrows=$docs->get_result();
+$ann=$conn->query("SELECT title,message,created_at FROM announcements ORDER BY created_at DESC LIMIT 5");
+$readyStmt=$conn->prepare("SELECT id,document_type,ready_at FROM document_requests WHERE resident_id=? AND status='Ready' ORDER BY ready_at DESC LIMIT 5");
+$readyStmt->bind_param("i",$rid);
+$readyStmt->execute();
+$readyDocs=$readyStmt->get_result();
+
+$hotlines=$conn->query("SELECT agency,phone FROM emergency_hotlines ORDER BY id");
+?>
+<div class="d-flex justify-content-between align-items-center mb-4"><h2 class="fw-bold">Resident Dashboard</h2><span class="text-muted"><?php echo date("F d, Y"); ?></span></div>
+<div class="alert alert-success"><i class="bi bi-person-circle"></i> Welcome, <b><?php echo e($_SESSION["user"]["full_name"]); ?></b>. This is your personal resident account.</div>
+<?php if ($readyDocs->num_rows > 0) { ?>
+<div class="alert alert-warning border-warning shadow-sm"><div class="fw-bold"><i class="bi bi-bell-fill"></i> Document Ready for Pickup</div><div class="small mt-1">Your requested document is ready. Please visit the barangay office to pick it up.</div><ul class="mb-0 mt-2"><?php while($rd=$readyDocs->fetch_assoc()){ ?><li><b><?php echo e($rd["document_type"]); ?></b><?php if($rd["ready_at"]){ echo ' — ready '.e($rd["ready_at"]); } ?></li><?php } ?></ul><a class="btn btn-sm btn-warning mt-2" href="document_requests.php">View My Requests</a></div>
+<?php } ?>
+<div class="card shadow-sm mt-3 border-danger">
+<div class="card-body">
+<h5 class="text-danger"><i class="bi bi-telephone-fill"></i> Emergency Hotlines</h5>
+<div class="row g-2"><?php while($h=$hotlines->fetch_assoc()){ ?><div class="col-md-6 col-xl-4"><div class="border rounded p-2 h-100"><div class="fw-bold small"><?php echo e($h["agency"]); ?></div><div class="text-danger fw-bold"><?php echo $h["phone"]!=="" ? e($h["phone"]) : '<span class="text-muted fw-normal">NUMBER NOT SET</span>'; ?></div></div></div><?php } ?></div>
+</div></div>
+
+<?php if(!$resident){ ?><div class="alert alert-danger">Resident record not found.</div><?php require_once "../includes/footer.php"; exit; } ?>
+<div class="row g-3">
+<div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><small class="text-muted">Age</small><h3><?php echo e($resident["age"]); ?></h3></div></div></div>
+<div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><small class="text-muted">Sex</small><h3><?php echo e($resident["sex"]); ?></h3></div></div></div>
+<div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><small class="text-muted">Senior Status</small><h3><?php echo $resident["senior"]==='Yes' ? 'Senior Citizen' : 'Not Senior'; ?></h3></div></div></div>
+<div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><small class="text-muted">Voter Status</small><h3><?php echo e($resident["voter_status"]); ?></h3></div></div></div>
+</div>
+<div class="row g-3 mt-2"><div class="col-lg-7"><div class="card shadow-sm"><div class="card-body"><h5>My Information</h5><div class="row"><div class="col-md-6"><p><b>Resident No.:</b> <?php echo e($resident["resident_no"]); ?></p><p><b>Name:</b> <?php echo e($resident["first_name"].' '.$resident["middle_name"].' '.$resident["last_name"].' '.$resident["suffix"]); ?></p><p><b>Birthdate:</b> <?php echo e($resident["birthdate"]); ?></p><p><b>Civil Status:</b> <?php echo e($resident["civil_status"]); ?></p></div><div class="col-md-6"><p><b>Address:</b> <?php echo e($resident["address"]); ?></p><p><b>Purok:</b> <?php echo e($resident["purok"]); ?></p><p><b>PWD:</b> <?php echo e($resident["pwd"]); ?></p><p><b>Contact:</b> <?php echo e($resident["contact_no"]); ?></p></div></div></div></div>
+<div class="col-lg-5"><div class="card shadow-sm"><div class="card-body"><h5>Recent Announcements</h5><?php while($a=$ann->fetch_assoc()){ ?><div class="border-bottom pb-2 mb-2"><b><?php echo e($a["title"]); ?></b><div class="small"><?php echo nl2br(e($a["message"])); ?></div><small class="text-muted"><?php echo e($a["created_at"]); ?></small></div><?php } if($ann->num_rows===0) echo '<p class="text-muted mb-0">No announcements.</p>'; ?></div></div></div></div>
+<?php $docs->close(); $readyStmt->close(); require_once "../includes/footer.php"; ?>

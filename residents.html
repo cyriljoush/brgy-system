@@ -1,0 +1,137 @@
+<?php
+require_once "../includes/header.php";
+ensure_dead_status_column($conn);
+
+if (isset($_GET['delete']) && $_SESSION['user']['role'] === 'Administrator') {
+    $id=(int)$_GET['delete'];
+    $stmt=$conn->prepare("DELETE FROM residents WHERE id=?"); $stmt->bind_param("i",$id); $stmt->execute(); $stmt->close();
+    log_action($conn,"Deleted resident ID ".$id);
+    header("Location: residents.php"); exit;
+}
+
+if ($_SERVER["REQUEST_METHOD"]==="POST") {
+    $id=(int)(isset($_POST['id'])?$_POST['id']:0);
+    $data=[
+      trim($_POST['resident_no']),trim($_POST['first_name']),trim($_POST['middle_name']),trim($_POST['last_name']),
+      trim($_POST['suffix']),$_POST['sex'],$_POST['birthdate'],$_POST['civil_status'],trim($_POST['citizenship']),
+      trim($_POST['occupation']),trim($_POST['contact_no']),trim($_POST['address']),trim($_POST['purok']),
+      $_POST['voter_status'],$_POST['pwd'],
+      (($_SESSION['user']['role'] === 'Administrator' && isset($_POST['is_dead']) && $_POST['is_dead']==='Yes') ? 'Yes' : 'No')
+    ];
+    if($id){
+      $sql="UPDATE residents SET resident_no=?,first_name=?,middle_name=?,last_name=?,suffix=?,sex=?,birthdate=?,civil_status=?,citizenship=?,occupation=?,contact_no=?,address=?,purok=?,voter_status=?,pwd=?,senior=?,is_dead=? WHERE id=?";
+     $stmt = $conn->prepare($sql);
+
+$stmt->bind_param(
+    "sssssssssssssssssi",
+    $data[0],
+    $data[1],
+    $data[2],
+    $data[3],
+    $data[4],
+    $data[5],
+    $data[6],
+    $data[7],
+    $data[8],
+    $data[9],
+    $data[10],
+    $data[11],
+    $data[12],
+    $data[13],
+    $data[14],
+    $data[15],
+    $data[16],
+    $id
+);
+
+$stmt->execute();
+$stmt->close();
+      sync_senior_status($conn);
+      log_action($conn,"Updated resident ".$data[0]);
+    } else {
+      $sql="INSERT INTO residents(resident_no,first_name,middle_name,last_name,suffix,sex,birthdate,civil_status,citizenship,occupation,contact_no,address,purok,voter_status,pwd,senior,is_dead) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+     $stmt = $conn->prepare($sql);
+
+$stmt->bind_param(
+    "sssssssssssssssss",
+    $data[0],
+    $data[1],
+    $data[2],
+    $data[3],
+    $data[4],
+    $data[5],
+    $data[6],
+    $data[7],
+    $data[8],
+    $data[9],
+    $data[10],
+    $data[11],
+    $data[12],
+    $data[13],
+    $data[14],
+    $data[15],
+    $data[16]
+);
+
+$stmt->execute();
+$stmt->close();
+      sync_senior_status($conn);
+      log_action($conn,"Added resident ".$data[0]);
+    }
+    header("Location: residents.php"); exit;
+}
+
+$edit=null;
+if(isset($_GET['edit'])) { $stmt=$conn->prepare("SELECT * FROM residents WHERE id=?"); $stmt->bind_param("i",$_GET['edit']); $stmt->execute(); $edit=$stmt->get_result()->fetch_assoc(); $stmt->close(); }
+$search=isset($_GET['search']) ? trim($_GET['search']) : "";
+$page=isset($_GET['page']) ? max(1,(int)$_GET['page']) : 1;
+$perPage=10;
+$offset=($page-1)*$perPage;
+
+if($search!==""){
+  $like="%".$search."%";
+  $countStmt=$conn->prepare("SELECT COUNT(*) c FROM residents WHERE resident_no LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR address LIKE ? OR pwd LIKE ?");
+  $countStmt->bind_param("sssss",$like,$like,$like,$like,$like); $countStmt->execute(); $totalRows=$countStmt->get_result()->fetch_assoc()['c']; $countStmt->close();
+  $stmt=$conn->prepare("SELECT * FROM residents WHERE resident_no LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR address LIKE ? OR pwd LIKE ? ORDER BY last_name,first_name LIMIT ? OFFSET ?");
+  $stmt->bind_param("sssssii",$like,$like,$like,$like,$like,$perPage,$offset); $stmt->execute(); $rows=$stmt->get_result();
+} else {
+  $totalRows=$conn->query("SELECT COUNT(*) c FROM residents")->fetch_assoc()['c'];
+  $stmt=$conn->prepare("SELECT * FROM residents ORDER BY last_name,first_name LIMIT ? OFFSET ?");
+  $stmt->bind_param("ii",$perPage,$offset); $stmt->execute(); $rows=$stmt->get_result();
+}
+$totalPages=max(1,(int)ceil($totalRows/$perPage));
+?>
+<div class="d-flex justify-content-between align-items-center mb-3"><h2>Residents</h2><a class="btn btn-success" href="?action=add">+ Add Resident</a></div>
+<?php if(isset($_GET['action']) || $edit): ?>
+<div class="card shadow-sm mb-4"><div class="card-body"><h5><?= $edit?'Edit Resident':'Add Resident' ?></h5>
+<form method="post" class="row g-2">
+<input type="hidden" name="id" value="<?=e(isset($edit['id']) ? $edit['id'] : 0)?>">
+<?php
+$fields=[
+['resident_no','Resident No.'],['first_name','First Name'],['middle_name','Middle Name'],['last_name','Last Name'],['suffix','Suffix'],
+['birthdate','Birthdate','date'],['civil_status','Civil Status'],['citizenship','Citizenship'],['occupation','Occupation'],['contact_no','Contact No.'],['address','Address'],['purok','Purok']
+];
+foreach($fields as $f): ?><div class="col-md-4"><label class="form-label"><?=e($f[1])?></label><input class="form-control" name="<?=e($f[0])?>" <?=isset($f[2])?'type="'.$f[2].'"':'type="text"'?> value="<?=e(isset($edit[$f[0]]) ? $edit[$f[0]] : '')?> " <?=in_array($f[0],['resident_no','first_name','last_name','birthdate','civil_status','address'])?'required':''?>></div><?php endforeach; ?>
+<div class="col-md-3"><label class="form-label">Sex</label><select name="sex" class="form-select"><?php foreach(['Male','Female','Other'] as $v):?><option <?=((isset($edit['sex']) ? $edit['sex'] : 'Male')===$v ? 'selected' : '')?>><?=$v?></option><?php endforeach;?></select></div>
+<div class="col-md-3"><label class="form-label">Voter Status</label><select name="voter_status" class="form-select"><?php foreach(['Registered','Not Registered','Unknown'] as $v):?><option <?=((isset($edit['voter_status']) ? $edit['voter_status'] : 'Unknown')===$v ? 'selected' : '')?>><?=$v?></option><?php endforeach;?></select></div>
+<div class="col-md-2"><label class="form-label">PWD</label><select name="pwd" class="form-select"><option>No</option><option <?=((isset($edit['pwd']) ? $edit['pwd'] : 'No')==='Yes' ? 'selected' : '')?>>Yes</option></select></div>
+<div class="col-md-2"><label class="form-label">Senior (Auto)</label><input class="form-control" value="Age 55+ = Senior" readonly></div>
+<?php if ($_SESSION['user']['role'] === 'Administrator') { ?>
+<div class="col-md-2"><label class="form-label">Resident Status</label><select name="is_dead" class="form-select"><option value="No" <?php echo ((isset($edit['is_dead']) ? $edit['is_dead'] : 'No') === 'No' ? 'selected' : ''); ?>>Living</option><option value="Yes" <?php echo ((isset($edit['is_dead']) ? $edit['is_dead'] : 'No') === 'Yes' ? 'selected' : ''); ?>>Deceased</option></select></div>
+<?php } ?>
+<div class="col-12"><button class="btn btn-success">Save Resident</button> <a class="btn btn-secondary" href="residents.php">Cancel</a></div>
+</form></div></div>
+<?php endif; ?>
+<form class="row g-2 mb-3"><div class="col-md-5"><input class="form-control" name="search" value="<?=e($search)?>" placeholder="Search resident no., name, address, or PWD (Yes/No)"></div><div class="col-auto"><button class="btn btn-outline-success">Search</button></div></form>
+<div class="card shadow-sm"><div class="table-responsive"><table class="table table-hover mb-0"><thead class="table-success"><tr><th>No.</th><th>Name</th><th>Sex</th><th>Birthdate</th><th>Contact</th><th>Address</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+<?php while($r=$rows->fetch_assoc()): ?><tr><td><?=e($r['resident_no'])?></td><td><?=e($r['last_name'].', '.$r['first_name'].' '.$r['middle_name'])?></td><td><?=e($r['sex'])?></td><td><?=e($r['birthdate'])?></td><td><?=e($r['contact_no'])?></td><td><?=e($r['address'])?></td><td><?php echo (isset($r['is_dead']) && $r['is_dead']==='Yes') ? '<span class="badge bg-dark">DECEASED</span>' : '<span class="badge bg-success">LIVING</span>'; ?></td><td><a class="btn btn-sm btn-outline-primary" href="?edit=<?=$r['id']?>">Edit</a> <a class="btn btn-sm btn-outline-danger" href="?delete=<?=$r['id']?>" onclick="return confirm('Delete this resident?')">Delete</a></td></tr><?php endwhile; ?>
+</tbody></table></div>
+<div class="card-footer bg-transparent d-flex justify-content-between align-items-center">
+<small class="text-muted">Showing <?php echo $totalRows ? ($offset+1) : 0; ?> to <?php echo min($offset+$perPage,$totalRows); ?> of <?php echo $totalRows; ?> records</small>
+<?php if($totalPages>1){ ?><nav><ul class="pagination pagination-sm mb-0">
+<?php if($page>1){ ?><li class="page-item"><a class="page-link" href="?page=<?php echo $page-1; ?>&search=<?php echo urlencode($search); ?>">Previous</a></li><?php } ?>
+<?php for($p=1;$p<=$totalPages;$p++){ ?><li class="page-item <?php echo $p==$page?'active':''; ?>"><a class="page-link" href="?page=<?php echo $p; ?>&search=<?php echo urlencode($search); ?>"><?php echo $p; ?></a></li><?php } ?>
+<?php if($page<$totalPages){ ?><li class="page-item"><a class="page-link" href="?page=<?php echo $page+1; ?>&search=<?php echo urlencode($search); ?>">Next</a></li><?php } ?>
+</ul></nav><?php } ?>
+</div></div>
+<?php require_once "../includes/footer.php"; ?>

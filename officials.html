@@ -1,0 +1,18 @@
+<?php
+require_once "../includes/header.php";
+if($_SESSION["user"]["role"]!=="Administrator" && $_SESSION["user"]["role"]!=="Secretary"){ echo '<div class="alert alert-danger">Administrator or Secretary only.</div>'; require_once "../includes/footer.php"; exit; }
+$positions=array("Barangay Captain","Barangay Secretary","Barangay Treasurer","Barangay Kagawad 1","Barangay Kagawad 2","Barangay Kagawad 3","Barangay Kagawad 4","Barangay Kagawad 5","Barangay Kagawad 6","Barangay Kagawad 7");
+if($_SERVER["REQUEST_METHOD"]==="POST"){
+ foreach($positions as $pos){ $name=isset($_POST["name"][ $pos ])?trim($_POST["name"][ $pos ]):""; $contact=isset($_POST["contact"][ $pos ])?trim($_POST["contact"][ $pos ]):""; $start=isset($_POST["start"][ $pos ])?$_POST["start"][ $pos ]:""; $end=isset($_POST["end"][ $pos ])?$_POST["end"][ $pos ]:"";
+  $stmt=$conn->prepare("SELECT id FROM officials WHERE position=? LIMIT 1"); $stmt->bind_param("s",$pos); $stmt->execute(); $found=$stmt->get_result()->fetch_assoc(); $stmt->close();
+  if($found){ $stmt=$conn->prepare("UPDATE officials SET full_name=?,contact_no=?,term_start=?,term_end=? WHERE position=?"); $stmt->bind_param("sssss",$name,$contact,$start,$end,$pos); } else { $stmt=$conn->prepare("INSERT INTO officials(position,full_name,contact_no,term_start,term_end) VALUES(?,?,?,?,?)"); $stmt->bind_param("sssss",$pos,$name,$contact,$start,$end); } $stmt->execute(); $stmt->close(); }
+ header("Location: officials.php?saved=1"); exit; }
+$rows=array(); $q=$conn->query("SELECT * FROM officials"); while($r=$q->fetch_assoc()) $rows[$r["position"]]=$r;
+?>
+<h2 class="mb-3">Barangay Officials</h2>
+<div class="alert alert-info">Enter the current Barangay Captain, Secretary, Treasurer, and seven Barangay Kagawad members. The system keeps one record for each position.</div>
+<?php if(isset($_GET["saved"])) echo '<div class="alert alert-success">Barangay officials saved successfully.</div>'; ?>
+<form method="post"><div class="card shadow-sm"><div class="table-responsive"><table class="table align-middle mb-0"><thead class="table-success"><tr><th>Position</th><th>Full Name</th><th>Contact No.</th><th>Term Start</th><th>Term End</th></tr></thead><tbody>
+<?php foreach($positions as $pos){ $r=isset($rows[$pos])?$rows[$pos]:array("full_name"=>"","contact_no"=>"","term_start"=>"","term_end"=>""); ?><tr><td><b><?php echo e($pos); ?></b></td><td><input class="form-control" name="name[<?php echo e($pos); ?>]" value="<?php echo e($r['full_name']); ?>"></td><td><input class="form-control" name="contact[<?php echo e($pos); ?>]" value="<?php echo e($r['contact_no']); ?>"></td><td><input class="form-control" type="date" name="start[<?php echo e($pos); ?>]" value="<?php echo e($r['term_start']); ?>"></td><td><input class="form-control" type="date" name="end[<?php echo e($pos); ?>]" value="<?php echo e($r['term_end']); ?>"></td></tr><?php } ?>
+</tbody></table></div><div class="card-body"><button class="btn btn-success">Save Officials</button></div></div></form>
+<?php require_once "../includes/footer.php"; ?>

@@ -1,0 +1,24 @@
+<?php
+require_once "../includes/header.php";
+sync_senior_status($conn);
+$male=$conn->query("SELECT COUNT(*) c FROM residents WHERE sex='Male'")->fetch_assoc()["c"];
+$female=$conn->query("SELECT COUNT(*) c FROM residents WHERE sex='Female'")->fetch_assoc()["c"];
+$other=$conn->query("SELECT COUNT(*) c FROM residents WHERE sex='Other'")->fetch_assoc()["c"];
+$senior=$conn->query("SELECT COUNT(*) c FROM residents WHERE senior='Yes'")->fetch_assoc()["c"];
+$pwd=$conn->query("SELECT COUNT(*) c FROM residents WHERE pwd='Yes'")->fetch_assoc()["c"];
+$voters=$conn->query("SELECT COUNT(*) c FROM residents WHERE voter_status='Registered'")->fetch_assoc()["c"];
+$nonvoters=$conn->query("SELECT COUNT(*) c FROM residents WHERE voter_status='Not Registered'")->fetch_assoc()["c"];
+$seniorRows=$conn->query("SELECT resident_no,first_name,middle_name,last_name,sex,birthdate,TIMESTAMPDIFF(YEAR,birthdate,CURDATE()) age,address,purok FROM residents WHERE senior='Yes' ORDER BY last_name");
+$pwdRows=$conn->query("SELECT resident_no,first_name,middle_name,last_name,sex,birthdate,address,purok FROM residents WHERE pwd='Yes' ORDER BY last_name");
+$voterRows=$conn->query("SELECT resident_no,first_name,middle_name,last_name,sex,purok FROM residents WHERE voter_status='Registered' ORDER BY last_name");
+?>
+<div class="d-flex justify-content-between align-items-center mb-3"><h2>Population Reports</h2><button class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer"></i> Print Report</button></div>
+<div class="row g-3">
+<div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><h5>Sex Distribution</h5><p class="mb-1">Male: <b><?php echo e($male); ?></b></p><p class="mb-1">Female: <b><?php echo e($female); ?></b></p><p class="mb-0">Other: <b><?php echo e($other); ?></b></p></div></div></div>
+<div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><h5>Special Records</h5><p class="mb-1">Senior Citizens (Age 55+): <b><?php echo e($senior); ?></b></p><p class="mb-0">PWD: <b><?php echo e($pwd); ?></b></p></div></div></div>
+<div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><h5>Voter Records</h5><p class="mb-1">Registered Voters: <b><?php echo e($voters); ?></b></p><p class="mb-0">Not Registered: <b><?php echo e($nonvoters); ?></b></p></div></div></div>
+</div>
+<div class="card shadow-sm mt-3"><div class="card-body"><h5>Senior Citizens — Automatically Based on Age 55+</h5><div class="table-responsive"><table class="table"><thead><tr><th>Resident No.</th><th>Name</th><th>Sex</th><th>Age</th><th>Birthdate</th><th>Purok</th><th>Address</th></tr></thead><tbody><?php while($r=$seniorRows->fetch_assoc()){ ?><tr><td><?php echo e($r['resident_no']); ?></td><td><?php echo e($r['last_name'].', '.$r['first_name'].' '.$r['middle_name']); ?></td><td><?php echo e($r['sex']); ?></td><td><?php echo e($r['age']); ?></td><td><?php echo e($r['birthdate']); ?></td><td><?php echo e($r['purok']); ?></td><td><?php echo e($r['address']); ?></td></tr><?php } if($seniorRows->num_rows===0) echo '<tr><td colspan="7" class="text-muted">No senior citizens recorded.</td></tr>'; ?></tbody></table></div></div></div>
+<div class="card shadow-sm mt-3"><div class="card-body"><h5>PWD Records</h5><div class="table-responsive"><table class="table"><thead><tr><th>Resident No.</th><th>Name</th><th>Sex</th><th>Birthdate</th><th>Purok</th><th>Address</th></tr></thead><tbody><?php while($r=$pwdRows->fetch_assoc()){ ?><tr><td><?php echo e($r['resident_no']); ?></td><td><?php echo e($r['last_name'].', '.$r['first_name'].' '.$r['middle_name']); ?></td><td><?php echo e($r['sex']); ?></td><td><?php echo e($r['birthdate']); ?></td><td><?php echo e($r['purok']); ?></td><td><?php echo e($r['address']); ?></td></tr><?php } if($pwdRows->num_rows===0) echo '<tr><td colspan="6" class="text-muted">No PWD records.</td></tr>'; ?></tbody></table></div></div></div>
+<div class="card shadow-sm mt-3"><div class="card-body"><h5>Registered Voters</h5><div class="table-responsive"><table class="table"><thead><tr><th>Resident No.</th><th>Name</th><th>Sex</th><th>Purok</th></tr></thead><tbody><?php while($r=$voterRows->fetch_assoc()){ ?><tr><td><?php echo e($r['resident_no']); ?></td><td><?php echo e($r['last_name'].', '.$r['first_name'].' '.$r['middle_name']); ?></td><td><?php echo e($r['sex']); ?></td><td><?php echo e($r['purok']); ?></td></tr><?php } if($voterRows->num_rows===0) echo '<tr><td colspan="4" class="text-muted">No registered voters.</td></tr>'; ?></tbody></table></div></div></div>
+<?php require_once "../includes/footer.php"; ?>

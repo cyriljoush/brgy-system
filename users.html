@@ -1,0 +1,35 @@
+<?php
+require_once "../includes/header.php";
+if($_SESSION["user"]["role"]!=="Administrator"){ die('<div class="alert alert-danger">Administrator only.</div>'); }
+$error="";
+if($_SERVER["REQUEST_METHOSD"]==="POST"){
+ $username=trim($_POST["username"]); $full=trim($_POST["full_name"]); $password=$_POST["password"]; $role=$_POST["role"]; $resident_id=(int)(isset($_POST["resident_id"])?$_POST["resident_id"]:0);
+ if($resident_id <= 0) $resident_id = null;
+ if($role!=="Resident") $resident_id=null;
+ $hash=hash("sha256",$password);
+ if($resident_id === null){
+   $stmt=$conn->prepare("INSERT INTO users(username,password,full_name,role,resident_id) VALUES(?,?,?,?,NULL)");
+   if($stmt){ $stmt->bind_param("ssss",$username,$hash,$full,$role); }
+ } else {
+   $stmt=$conn->prepare("INSERT INTO users(username,password,full_name,role,resident_id) VALUES(?,?,?,?,?)");
+   if($stmt){ $stmt->bind_param("ssssi",$username,$hash,$full,$role,$resident_id); }
+ }
+ if($stmt){ if(!$stmt->execute()) $error="Unable to add user: ".$stmt->error; $stmt->close(); } else $error="Database error: ".$conn->error;
+ if($error===""){ header("Location: users.php"); exit; }
+}
+$people=$conn->query("SELECT id,resident_no,first_name,middle_name,last_name FROM residents ORDER BY last_name,first_name");
+$rows=$conn->query("SELECT u.id,u.username,u.full_name,u.role,u.created_at,CONCAT(r.first_name,' ',r.last_name) resident_name FROM users u LEFT JOIN residents r ON u.resident_id=r.id ORDER BY u.id DESC");
+?>
+<h2 class="mb-3">User Management</h2>
+<?php if($error!=="") echo '<div class="alert alert-danger">'.e($error).'</div>'; ?>
+<div class="card shadow-sm mb-4"><div class="card-body"><h5>Create Account</h5><form method="post" class="row g-2">
+<div class="col-md-2"><input class="form-control" name="username" placeholder="Username" required></div>
+<div class="col-md-3"><input class="form-control" name="full_name" placeholder="Full Name" required></div>
+<div class="col-md-2"><input class="form-control" type="password" name="password" placeholder="Password" required></div>
+<div class="col-md-2"><select class="form-select" name="role" id="roleSelect" onchange="toggleResidentSelect()"><option>Staff</option><option>Secretary</option><option>Treasurer</option><option>Kagawad</option><option>Captain</option><option>Resident</option><option>Viewer</option><option>Administrator</option></select></div>
+<div class="col-md-2"><select class="form-select" name="resident_id" id="residentSelect"><option value="0">Link Resident (optional)</option><?php while($p=$people->fetch_assoc()){ ?><option value="<?php echo e($p['id']); ?>"><?php echo e($p['resident_no'].' - '.$p['last_name'].', '.$p['first_name']); ?></option><?php } ?></select></div>
+<div class="col-md-1"><button class="btn btn-success w-100">Add</button></div>
+</form><small class="text-muted">For a Resident account, link the account to that resident's record. Treasurer and Kagawad are available as separate account roles.</small></div></div>
+<div class="card shadow-sm"><div class="table-responsive"><table class="table mb-0"><thead class="table-success"><tr><th>Username</th><th>Name</th><th>Role</th><th>Linked Resident</th><th>Created</th></tr></thead><tbody><?php while($r=$rows->fetch_assoc()):?><tr><td><?php echo e($r['username']); ?></td><td><?php echo e($r['full_name']); ?></td><td><span class="badge bg-success"><?php echo e($r['role']); ?></span></td><td><?php echo e($r['resident_name']); ?></td><td><?php echo e($r['created_at']); ?></td></tr><?php endwhile;?></tbody></table></div></div>
+<script>function toggleResidentSelect(){var role=document.getElementById('roleSelect').value;document.getElementById('residentSelect').disabled=(role!=='Resident');}toggleResidentSelect();</script>
+<?php require_once "../includes/footer.php"; ?>

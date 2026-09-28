@@ -1,0 +1,29 @@
+<?php
+require_once "../includes/config.php";
+require_login();
+$id=(int)(isset($_GET['id'])?$_GET['id']:0);
+$stmt=$conn->prepare("SELECT d.*,r.* FROM documents d LEFT JOIN residents r ON d.resident_id=r.id WHERE d.id=?");
+$stmt->bind_param("i",$id);$stmt->execute();$d=$stmt->get_result()->fetch_assoc();$stmt->close();
+if(!$d) die("Document not found.");
+$fullname=trim($d['first_name'].' '.$d['middle_name'].' '.$d['last_name'].' '.$d['suffix']);
+?>
+<!doctype html><html><head><meta charset="utf-8"><title><?=e($d['document_type'])?></title>
+<style>
+body{font-family:Georgia,serif;margin:50px}.paper{max-width:800px;margin:auto;border:1px solid #ddd;padding:60px;text-align:center;min-height:850px}
+h1{font-size:25px;margin:5px}.title{font-size:24px;font-weight:bold;margin:45px 0 30px}.body{text-align:justify;font-size:18px;line-height:2}
+.sign{margin-top:80px;display:flex;justify-content:space-around}.no-print{margin-bottom:20px}
+@media print{.no-print{display:none}.paper{border:0}}
+</style></head><body>
+<div class="no-print"><button onclick="window.print()">Print</button> <button onclick="window.close()">Close</button></div>
+<div class="paper">
+<p>REPUBLIC OF THE PHILIPPINES</p><p>PROVINCE / CITY / MUNICIPALITY</p><h1>BARANGAY OFFICE</h1><p>Barangay __________</p>
+<div class="title"><?=e(strtoupper($d['document_type']))?></div>
+<div class="body">
+<p>TO WHOM IT MAY CONCERN:</p>
+<p>This is to certify that <strong><?=e($fullname)?></strong>, a resident of <strong><?=e($d['address'])?></strong>, is a bonafide resident of this barangay.</p>
+<p>This certification is issued upon the request of the above-named person for <strong><?=e($d['purpose'] ?: 'whatever legal purpose it may serve')?></strong>.</p>
+<p>Issued this <?=date('jS',strtotime($d['issued_date']))?> day of <?=date('F Y',strtotime($d['issued_date']))?>.</p>
+</div>
+<div class="sign"><div><br>_________________________<br>Barangay Secretary</div><div><br>_________________________<br>Punong Barangay</div></div>
+<p style="margin-top:50px;font-size:13px">Document No.: <?=e($d['document_no'])?></p>
+</div></body></html>

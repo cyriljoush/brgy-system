@@ -1,0 +1,12 @@
+<?php
+require_once "../includes/header.php";
+resident_only();
+$rid=(int)$_SESSION["user"]["resident_id"];
+$stmt=$conn->prepare("SELECT * FROM residents WHERE id=?"); $stmt->bind_param("i",$rid); $stmt->execute(); $r=$stmt->get_result()->fetch_assoc(); $stmt->close();
+?>
+<h2 class="mb-3">My Profile</h2>
+<?php if(!$r){ ?><div class="alert alert-danger">No resident record is linked to this account.</div><?php } else { ?>
+<div class="card shadow-sm"><div class="card-body"><div class="row g-3">
+<?php foreach(array('resident_no'=>'Resident No.','first_name'=>'First Name','middle_name'=>'Middle Name','last_name'=>'Last Name','suffix'=>'Suffix','sex'=>'Sex','birthdate'=>'Birthdate','civil_status'=>'Civil Status','citizenship'=>'Citizenship','occupation'=>'Occupation','contact_no'=>'Contact No.','address'=>'Address','purok'=>'Purok','voter_status'=>'Voter Status','pwd'=>'PWD','senior'=>'Senior Status') as $k=>$label){ ?><div class="col-md-4"><div class="text-muted small"><?php echo e($label); ?></div><div class="fw-semibold"><?php echo e($r[$k]); ?></div></div><?php } ?>
+</div></div></div><?php } ?>
+<?php require_once "../includes/footer.php"; ?>

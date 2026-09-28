@@ -1,0 +1,19 @@
+<?php
+require_once "../includes/config.php"; require_login();
+$id=(int)(isset($_GET['id'])?$_GET['id']:0);
+$stmt=$conn->prepare("SELECT * FROM blotter WHERE id=?");$stmt->bind_param("i",$id);$stmt->execute();$b=$stmt->get_result()->fetch_assoc();$stmt->close();
+if(!$b) die("Blotter not found.");
+?>
+<!doctype html><html><head><meta charset="utf-8"><title>Blotter <?=e($b['case_no'])?></title>
+<style>body{font-family:Arial;margin:40px}.paper{max-width:850px;margin:auto}.center{text-align:center}.row{display:flex;border-bottom:1px solid #ccc;padding:10px}.label{width:180px;font-weight:bold}.no-print{margin-bottom:20px}@media print{.no-print{display:none}}</style></head>
+<body><div class="no-print"><button onclick="window.print()">Print</button></div><div class="paper">
+<div class="center"><h2>BARANGAY BLOTTER REPORT</h2><h3><?=e($b['case_no'])?></h3></div>
+<div class="row"><div class="label">Complainant</div><div><?=e($b['complainant'])?></div></div>
+<div class="row"><div class="label">Respondent</div><div><?=e($b['respondent'])?></div></div>
+<div class="row"><div class="label">Incident Date</div><div><?=e($b['incident_date'])?></div></div>
+<div class="row"><div class="label">Location</div><div><?=e($b['location'])?></div></div>
+<div class="row"><div class="label">Incident Type</div><div><?=e($b['incident_type'])?></div></div>
+<div class="row"><div class="label">Description</div><div><?=nl2br(e($b['description']))?></div></div>
+<div class="row"><div class="label">Action Taken</div><div><?=nl2br(e($b['action_taken']))?></div></div>
+<div class="row"><div class="label">Status</div><div><?=e($b['status'])?></div></div>
+</div></body></html>

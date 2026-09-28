@@ -1,0 +1,121 @@
+<?php
+require_once "../includes/header.php";
+resident_only();
+$officials = array();
+$qOfficials = $conn->query("SELECT position, full_name, contact_no, term_start, term_end FROM officials ORDER BY id");
+if ($qOfficials) { while ($o = $qOfficials->fetch_assoc()) { if (trim($o["full_name"]) !== "") $officials[] = $o; } }
+$officialData = json_encode($officials);
+?>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h2 class="fw-bold mb-1"><i class="bi bi-robot"></i> Barangay AI Assistant</h2>
+        <p class="text-muted mb-0">Ask about barangay services, documents, requirements, and your requests.</p>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div id="chatMessages" class="p-3" style="height:430px; overflow-y:auto; background:var(--surface-2);">
+            <div class="d-flex mb-3">
+                <div class="bg-success text-white rounded-3 px-3 py-2" style="max-width:80%;">
+                    Hello! I am your Barangay Assistant. You can ask me about document requests, barangay services, office hours, or how to check if your document is ready.
+                </div>
+            </div>
+        </div>
+        <div class="border-top p-3">
+            <div class="input-group">
+                <input type="text" id="chatInput" class="form-control" placeholder="Type your question..." autocomplete="off">
+                <button class="btn btn-success" type="button" onclick="sendChat()"><i class="bi bi-send"></i> Send</button>
+            </div>
+            <div class="mt-2">
+                <button class="btn btn-sm btn-outline-secondary chat-suggestion" type="button">How do I request a document?</button>
+                <button class="btn btn-sm btn-outline-secondary chat-suggestion" type="button">Is my document ready?</button>
+                <button class="btn btn-sm btn-outline-secondary chat-suggestion" type="button">What documents are available?</button>
+                <button class="btn btn-sm btn-outline-secondary chat-suggestion" type="button">Who are the barangay officials?</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+    var input = document.getElementById("chatInput");
+    var box = document.getElementById("chatMessages");
+    var officials = <?php echo $officialData ? $officialData : "[]"; ?>;
+
+    function addMessage(text, user) {
+        var row = document.createElement("div");
+        row.className = "d-flex mb-3 " + (user ? "justify-content-end" : "");
+        var bubble = document.createElement("div");
+        bubble.className = user ? "bg-success text-white rounded-3 px-3 py-2" : "bg-body-secondary rounded-3 px-3 py-2";
+        bubble.style.maxWidth = "80%";
+        bubble.textContent = text;
+        row.appendChild(bubble);
+        box.appendChild(row);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    function officialAnswer(q) {
+        var x = q.toLowerCase();
+        var asks = (x.indexOf("official") >= 0 || x.indexOf("captain") >= 0 || x.indexOf("secretary") >= 0 || x.indexOf("treasurer") >= 0 || x.indexOf("kagawad") >= 0);
+        if (!asks) return "";
+        if (!officials.length) return "THE BARANGAY OFFICIALS HAVE NOT YET BEEN ENTERED IN THE BARANGAY OFFICIALS PAGE.";
+        var out = "CURRENT BARANGAY OFFICIALS:\n";
+        for (var i=0;i<officials.length;i++) {
+            out += officials[i].position.toUpperCase() + ": " + officials[i].full_name.toUpperCase();
+            if (officials[i].contact_no) out += " (" + officials[i].contact_no + ")";
+            out += "\n";
+        }
+        return out;
+    }
+
+    function answer(q) {
+        var officialReply = officialAnswer(q);
+        if (officialReply) return officialReply;
+        var x = q.toLowerCase();
+        if (x.indexOf("request") >= 0 && x.indexOf("document") >= 0) {
+            return "TO REQUEST A DOCUMENT, OPEN REQUEST DOCUMENT, SELECT THE DOCUMENT TYPE, ENTER THE PURPOSE, AND CLICK SUBMIT REQUEST. YOUR REQUEST WILL BE SENT TO THE SECRETARY AND ADMINISTRATOR.";
+        }
+        if (x.indexOf("ready") >= 0 || x.indexOf("pickup") >= 0) {
+            return "YOU CAN CHECK YOUR REQUEST DOCUMENT PAGE OR RESIDENT DASHBOARD. WHEN THE STATUS IS CHANGED TO READY, A PICKUP NOTIFICATION WILL APPEAR.";
+        }
+        if (x.indexOf("document") >= 0 && (x.indexOf("available") >= 0 || x.indexOf("type") >= 0)) {
+            return "AVAILABLE REQUESTS INCLUDE BARANGAY CLEARANCE, CERTIFICATE OF RESIDENCY, CERTIFICATE OF INDIGENCY, CERTIFICATE OF GOOD MORAL CHARACTER, BARANGAY CERTIFICATE, BUSINESS CLEARANCE, AND FIRST-TIME JOB SEEKER CERTIFICATE.";
+        }
+        if (x.indexOf("senior") >= 0 || x.indexOf("55") >= 0) {
+            return "A RESIDENT IS AUTOMATICALLY MARKED AS A SENIOR CITIZEN WHEN THEIR COMPUTED AGE IS 55 OR OLDER IN THIS SYSTEM.";
+        }
+        if (x.indexOf("pwd") >= 0) {
+            return "PWD STATUS IS SHOWN IN YOUR RESIDENT PROFILE. IF YOUR RECORD IS INCORRECT, CONTACT THE BARANGAY ADMINISTRATOR.";
+        }
+        if (x.indexOf("voter") >= 0) {
+            return "YOUR REGISTERED VOTER STATUS IS SHOWN IN YOUR RESIDENT PROFILE AND DASHBOARD.";
+        }
+        if (x.indexOf("announcement") >= 0) {
+            return "OPEN ANNOUNCEMENTS FROM THE RESIDENT MENU TO VIEW THE LATEST BARANGAY ANNOUNCEMENTS.";
+        }
+        if (x.indexOf("contact") >= 0 || x.indexOf("office") >= 0) {
+            return "FOR OFFICE HOURS, CONTACT DETAILS, OR SERVICES NOT LISTED HERE, PLEASE CONTACT THE BARANGAY OFFICE DIRECTLY.";
+        }
+        return "I CAN HELP WITH DOCUMENT REQUESTS, PICKUP STATUS, AVAILABLE DOCUMENT TYPES, SENIOR STATUS, PWD STATUS, VOTER STATUS, AND BARANGAY ANNOUNCEMENTS. PLEASE TRY ASKING ABOUT ONE OF THESE.";
+    }
+
+    window.sendChat = function() {
+        var q = input.value.trim();
+        if (!q) return;
+        // Chat input is also saved/displayed in uppercase.
+        q = q.toUpperCase();
+        addMessage(q, true);
+        input.value = "";
+        setTimeout(function(){ addMessage(answer(q), false); }, 250);
+    };
+
+    input.addEventListener("keydown", function(e) {
+        if (e.key === "Enter") { e.preventDefault(); sendChat(); }
+    });
+    document.querySelectorAll(".chat-suggestion").forEach(function(btn){
+        btn.addEventListener("click", function(){ input.value = btn.textContent; sendChat(); });
+    });
+})();
+</script>
+<?php require_once "../includes/footer.php"; ?>
